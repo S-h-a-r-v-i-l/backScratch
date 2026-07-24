@@ -1,0 +1,9 @@
+numpy
+pandas
+statsmodels
+scipy
+pytest
+matplotlib
+seaborn
+jupyter
+pyarrow
