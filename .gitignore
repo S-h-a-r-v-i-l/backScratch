@@ -1,23 +1,27 @@
-# Data — keep directory structure but not contents
+# Environments
+.venv/
+venv/
+env/
+Scripts/
+Include/
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data (keep folder structure, ignore contents)
 data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.eggs/
-dist/
-build/
-
-# Jupyter
-.ipynb_checkpoints/
-notebooks/.ipynb_checkpoints/
-
-# Environment
-.env
-.venv/
-env/
-venv/
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
