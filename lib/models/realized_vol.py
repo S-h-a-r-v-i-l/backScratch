@@ -26,7 +26,7 @@ def compute_daily_rv_metrics(bars: pd.DataFrame) -> dict:
         'rvol': np.sqrt(rv),
     }
 
-def fill_Dataframe_with_rv_metrics(bars: pd.DataFrame) -> pd.DataFrame:
+def fill_daily_rv_metrics(bars: pd.DataFrame) -> pd.DataFrame:
     """
     Fill the DataFrame with realized volatility metrics computed from intraday data.
     """
@@ -42,10 +42,26 @@ def fill_Dataframe_with_rv_metrics(bars: pd.DataFrame) -> pd.DataFrame:
         df.loc[len(df)] = [date, metrics['log_rv'], metrics['rv'], metrics['rvol']]
     return df
 
+def fill_horizon_rv_metrics(rvMetric: str, bars: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fill the DataFrame with realized volatility metrics for all days in the input DataFrame.
+    """
+    dailyFrame = fill_daily_rv_metrics(bars);
+    df = pd.DataFrame(columns=['timestamp', 'day_rv', 'week_rv', 'month_rv', 'target'])
+
+    for i in range(len(dailyFrame)):
+        if(i < 22):
+            continue
+        day_rv = dailyFrame.iloc[i-1][rvMetric]
+        week_rv = dailyFrame.iloc[i-5:i][rvMetric].mean()
+        month_rv = dailyFrame.iloc[i-22:i][rvMetric].mean()
+        df.loc[len(df)] = [dailyFrame.iloc[i]['timestamp'], day_rv, week_rv, month_rv, dailyFrame.iloc[i][rvMetric]]
+    return df
+
 
 if __name__ == "__main__":
     df = get_bars(symbol="SPY", start="2024-01-01", end="2025-01-01")
     print(df['timestamp'].dtype)
     print(df.shape)
-    filled_df = fill_Dataframe_with_rv_metrics(df);
+    filled_df = fill_horizon_rv_metrics('rv', df);
     print(filled_df.head())
