@@ -29,8 +29,8 @@ def load_bars(symbol: str, start: str, end: str, timeframe_minutes: int = 5)-> p
         symbol_or_symbols=symbol,
         timeframe=TimeFrame(timeframe_minutes, TimeFrameUnit.Minute),
         start=start,
+        limit=None,
         end=end,
-        limit=100_000,
         adjustment="raw"
     )
 

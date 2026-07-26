@@ -13,13 +13,7 @@ def compute_daily_rv_metrics(bars: pd.DataFrame) -> dict:
     log_returns = np.log(bars['close'] / bars['close'].shift(1)).dropna()
     rv = (log_returns ** 2).sum()
     if(rv == 0):
-        print("Warning: Realized variance is zero for this day. Check the data.")
-        print(bars)
-        return {
-            'rv': 0,
-            'log_rv': -np.inf,
-            'rvol': 0,
-        }
+        return None
     return {
         'rv': rv,
         'log_rv': np.log(rv),
@@ -39,6 +33,9 @@ def fill_daily_rv_metrics(bars: pd.DataFrame) -> pd.DataFrame:
             print(f"Warning: Not enough data for {date}. Skipping.")
             continue
         metrics = compute_daily_rv_metrics(group)
+        if metrics is None:
+            print(f"Warning: Realized variance is zero for {date}. Skipping.")
+            continue
         df.loc[len(df)] = [date, metrics['log_rv'], metrics['rv'], metrics['rvol']]
     return df
 
