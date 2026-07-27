@@ -6,22 +6,30 @@ series, NaNs), and the three-component regression produces correct in-sample fit
 import pandas as pd
 import numpy as np
 
-from lib.models.realized_vol import fill_daily_rv_metrics, fill_horizon_rv_metrics
+from lib.models.realized_vol import fill_daily_bipower_variation, fill_daily_rv_metrics, fill_horizon_bipower_variation, fill_horizon_rv_metrics
 from lib.models.har_rv import compute_har_rv_coefficients
-from lib.utils.data_utils import get_bars
+from lib.utils.data_utils import get_bars, save_as_parquet
 
-VALID_RV_METRICS = ('rv', 'log_rv')
+VALID_RV_METRICS = ('rv', 'log_rv', 'bv', 'log_bv')
 
-def test_har_rv_coefficients(test_data: pd.DataFrame, start_offset: int, window_size: int, rvMetric: str):
+def test_har_rv_coefficients(test_data: pd.DataFrame, start_offset: int, window_size: int, rvMetric: str, toggleBV: bool = False) -> pd.DataFrame:
     if rvMetric not in VALID_RV_METRICS:
         raise ValueError(f"rvMetric must be one of {VALID_RV_METRICS}, got {rvMetric!r}")
 
-    dailyFrame = fill_daily_rv_metrics(test_data)
-    metricDf = fill_horizon_rv_metrics(rvMetric, test_data)
-    coefficients = compute_har_rv_coefficients(metricDf.head(start_offset))
+    if(toggleBV):
+        dailyFrame = fill_daily_bipower_variation(test_data)
+        metricDf = fill_horizon_bipower_variation(rvMetric, test_data)
+    else:
+        dailyFrame = fill_daily_rv_metrics(test_data)
+        metricDf = fill_horizon_rv_metrics(rvMetric, test_data)
 
-    columns = ['timestamp', 'predicted_rv', 'actual_rv', 'MSE']
-    if rvMetric == 'rv':
+    coefficients = compute_har_rv_coefficients(metricDf.head(start_offset), isBV=toggleBV)
+
+    if(toggleBV):
+        columns = ['timestamp', 'predicted_bv', 'actual_bv', 'MSE']
+    else:
+        columns = ['timestamp', 'predicted_rv', 'actual_rv', 'MSE']
+    if rvMetric == 'rv' or rvMetric == 'bv':
         columns.append('QLIKE')
     results_df = pd.DataFrame(columns=columns)
 
@@ -31,31 +39,33 @@ def test_har_rv_coefficients(test_data: pd.DataFrame, start_offset: int, window_
     for i in range(start_offset, len(metricDf)):
         # metricDf skips the first 22 days of dailyFrame (see fill_horizon_rv_metrics), so translate the index
         d = i + 22
-        day_rv = dailyFrame.iloc[d-1][rvMetric]
-        week_rv = dailyFrame.iloc[d-5:d][rvMetric].mean()
-        month_rv = dailyFrame.iloc[d-22:d][rvMetric].mean()
+        day = dailyFrame.iloc[d-1][rvMetric]
+        week = dailyFrame.iloc[d-5:d][rvMetric].mean()
+        month = dailyFrame.iloc[d-22:d][rvMetric].mean()
 
-        predicted_rv = (coefficients['const'] +
-                        coefficients['day_rv'] * day_rv +
-                        coefficients['week_rv'] * week_rv +
-                        coefficients['month_rv'] * month_rv)
+        predicted = (coefficients['const'] +
+                        coefficients['day_rv'] * day +
+                        coefficients['week_rv'] * week +
+                        coefficients['month_rv'] * month)
 
-        actual_rv = dailyFrame.iloc[d][rvMetric]
-        row = [dailyFrame.iloc[d]['timestamp'], predicted_rv, actual_rv, (predicted_rv - actual_rv) ** 2]
-        if rvMetric == 'rv':
-            row.append(actual_rv * (predicted_rv / actual_rv) - np.log(predicted_rv / actual_rv) - 1)
+        actual = dailyFrame.iloc[d][rvMetric]
+        row = [dailyFrame.iloc[d]['timestamp'], predicted, actual, (predicted - actual) ** 2]
+        if rvMetric == 'rv' or rvMetric == 'bv':
+            row.append(actual * (predicted / actual) - np.log(predicted / actual) - 1)
         results_df.loc[len(results_df)] = row
 
         # compute new coeeficients
-        coefficients = compute_har_rv_coefficients(metricDf.iloc[j:i])
+        coefficients = compute_har_rv_coefficients(metricDf.iloc[j:i], isBV=toggleBV)
         j = j + 1
 
+    save_as_parquet(results_df, f"data/results/test_har_{rvMetric}.parquet")
     return results_df
 
 if __name__ == "__main__":
     test = get_bars(symbol="SPY", start="2013-01-01", end="2019-01-01")
     print("Loaded test data shape:", test.shape)
-    results = test_har_rv_coefficients(test, start_offset=100, window_size=100, rvMetric='rv')
+    results = test_har_rv_coefficients(test, start_offset=100, window_size=100, rvMetric='log_rv', toggleBV=False)
+    results = test_har_rv_coefficients(test, start_offset=100, window_size=100, rvMetric='log_bv', toggleBV=True)
     print(results.head())
 
 

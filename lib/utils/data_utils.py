@@ -38,10 +38,10 @@ def load_bars(symbol: str, start: str, end: str, timeframe_minutes: int = 5)-> p
     df = bars.df 
     return df.reset_index()[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
 
-def save_bars_parquet(df: pd.DataFrame, path: str) -> None:
+def save_as_parquet(df: pd.DataFrame, path: str) -> None:
     df.to_parquet(path)
 
-def load_bars_parquet(path: str) -> pd.DataFrame:
+def load_parquet(path: str) -> pd.DataFrame:
     return pd.read_parquet(path)
 
 def get_bars(symbol: str, start: str, end: str, timeframe_minutes: int = 5) -> pd.DataFrame:
@@ -53,11 +53,11 @@ def get_bars(symbol: str, start: str, end: str, timeframe_minutes: int = 5) -> p
     
     if os.path.exists(parquet_path):
         print(f"Loaded bars from {parquet_path}")
-        return load_bars_parquet(parquet_path)
+        return load_parquet(parquet_path)
         
     
     df = load_bars(symbol, start, end, timeframe_minutes)
-    save_bars_parquet(df, parquet_path)
+    save_as_parquet(df, parquet_path)
     return df
 
 

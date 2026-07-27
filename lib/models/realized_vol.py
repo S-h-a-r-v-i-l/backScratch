@@ -20,6 +20,18 @@ def compute_daily_rv_metrics(bars: pd.DataFrame) -> dict:
         'rvol': np.sqrt(rv),
     }
 
+def compute_daily_bipower_variation(bars: pd.DataFrame) -> dict:
+    log_returns = np.log(bars['close'] / bars['close'].shift(1)).dropna()
+    abs_log_returns = np.abs(log_returns)
+    bv = (np.pi / 2) * (abs_log_returns * abs_log_returns.shift(1)).dropna().sum()
+    if(bv == 0):
+        return None
+    return {
+        'bv': bv,
+        'log_bv': np.log(bv),
+        'bvol': np.sqrt(bv),
+    }
+
 def fill_daily_rv_metrics(bars: pd.DataFrame) -> pd.DataFrame:
     """
     Fill the DataFrame with realized volatility metrics computed from intraday data.
@@ -39,6 +51,25 @@ def fill_daily_rv_metrics(bars: pd.DataFrame) -> pd.DataFrame:
         df.loc[len(df)] = [date, metrics['log_rv'], metrics['rv'], metrics['rvol']]
     return df
 
+def fill_daily_bipower_variation(bars: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fill the DataFrame with bipower variation metrics computed from intraday data.
+    """
+    df = pd.DataFrame(columns=['timestamp', 'log_bv', 'bv', 'bvol'])
+
+    grouped = bars.groupby(bars['timestamp'].dt.date)
+    print(len(grouped))
+    for date, group in grouped:
+        if(len(group) < 2):
+            print(f"Warning: Not enough data for {date}. Skipping.")
+            continue
+        metrics = compute_daily_bipower_variation(group)
+        if metrics is None:
+            print(f"Warning: Bipower variation is zero for {date}. Skipping.")
+            continue
+        df.loc[len(df)] = [date, metrics['log_bv'], metrics['bv'], metrics['bvol']]
+    return df
+
 def fill_horizon_rv_metrics(rvMetric: str, bars: pd.DataFrame) -> pd.DataFrame:
     """
     Fill the DataFrame with realized volatility metrics for all days in the input DataFrame.
@@ -53,6 +84,22 @@ def fill_horizon_rv_metrics(rvMetric: str, bars: pd.DataFrame) -> pd.DataFrame:
         week_rv = dailyFrame.iloc[i-5:i][rvMetric].mean()
         month_rv = dailyFrame.iloc[i-22:i][rvMetric].mean()
         df.loc[len(df)] = [dailyFrame.iloc[i]['timestamp'], day_rv, week_rv, month_rv, dailyFrame.iloc[i][rvMetric]]
+    return df
+
+def fill_horizon_bipower_variation(bvMetric: str, bars: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fill the DataFrame with bipower variation metrics for all days in the input DataFrame.
+    """
+    dailyFrame = fill_daily_bipower_variation(bars);
+    df = pd.DataFrame(columns=['timestamp', 'day_bv', 'week_bv', 'month_bv', 'target'])
+
+    for i in range(len(dailyFrame)):
+        if(i < 22):
+            continue
+        day_bv = dailyFrame.iloc[i-1][bvMetric]
+        week_bv = dailyFrame.iloc[i-5:i][bvMetric].mean()
+        month_bv = dailyFrame.iloc[i-22:i][bvMetric].mean()
+        df.loc[len(df)] = [dailyFrame.iloc[i]['timestamp'], day_bv, week_bv, month_bv, dailyFrame.iloc[i][bvMetric]]
     return df
 
 
