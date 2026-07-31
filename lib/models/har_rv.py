@@ -8,16 +8,17 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-from lib.models.realized_vol import fill_horizon_rv_metrics
+from lib.models.realized_vol import (
+    fill_horizon_rv_metrics,
+    fill_daily_rv_metrics,
+    fill_daily_bipower_variation,
+    fill_daily_jump,
+    fill_horizon_CSP,
+    fill_horizon_Jump,
+)
 from lib.utils.data_utils import get_bars
 
 def compute_har_rv_coefficients(rvFrame: pd.DataFrame, isBV: bool) -> dict:
-    """
-    Compute the coefficients for the HAR-RV model using OLS regression.
-    Returns a dictionary with the coefficients for daily, weekly, and monthly RV.
-    rvFrame must already contain the 'day_rv', 'week_rv', 'month_rv', and 'target' columns
-    (see fill_horizon_rv_metrics).
-    """
     if(isBV):
         day = 'day_bv'
         week = 'week_bv'
@@ -35,6 +36,25 @@ def compute_har_rv_coefficients(rvFrame: pd.DataFrame, isBV: bool) -> dict:
         'month_rv': model.params[month],
     }
 
+def compute_har_rv_cj_coefficients(CSP_Frame: pd.DataFrame, jump_Frame: pd.DataFrame, rv_Frame: pd.DataFrame) -> dict:
+    fullFrame = CSP_Frame[['timestamp', 'day_CSP', 'week_CSP', 'month_CSP']].merge(
+        jump_Frame[['timestamp', 'day_Jump', 'week_Jump', 'month_Jump']], on='timestamp', how='inner'
+    ).merge(
+        rv_Frame[['timestamp', 'target']], on='timestamp', how='inner'
+    )
+
+    model = sm.OLS(fullFrame['target'], sm.add_constant(fullFrame[['day_CSP', 'week_CSP', 'month_CSP', 'day_Jump', 'week_Jump', 'month_Jump']])).fit()
+    return {
+        'const': model.params['const'],
+        'day_CSP': model.params['day_CSP'],
+        'week_CSP': model.params['week_CSP'],
+        'month_CSP': model.params['month_CSP'],
+        'day_Jump': model.params['day_Jump'],
+        'week_Jump': model.params['week_Jump'],
+        'month_Jump': model.params['month_Jump']
+    }
+
+
 
 if __name__ == "__main__":
     barFrame = get_bars(symbol="SPY", start="2015-01-01", end="2019-01-01")
@@ -42,5 +62,16 @@ if __name__ == "__main__":
     rvFrame = fill_horizon_rv_metrics('log_rv', barFrame)
     coefficients = compute_har_rv_coefficients(rvFrame, isBV=False)
     print(coefficients)
+
+    dailyRvFrame = fill_daily_rv_metrics(barFrame)
+    dailyBvFrame = fill_daily_bipower_variation(barFrame)
+    dailyJumpFrame = fill_daily_jump(dailyRvFrame, dailyBvFrame)
+
+    cspFrame = fill_horizon_CSP(dailyRvFrame, dailyJumpFrame)
+    jumpFrame = fill_horizon_Jump(dailyRvFrame, dailyBvFrame)
+    rawRvFrame = fill_horizon_rv_metrics('rv', barFrame)
+
+    cjCoefficients = compute_har_rv_cj_coefficients(cspFrame, jumpFrame, rawRvFrame)
+    print(cjCoefficients)
 
     
