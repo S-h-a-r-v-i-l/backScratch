@@ -18,8 +18,10 @@ __pycache__/
 # Data (keep folder structure, ignore contents)
 data/raw/*
 data/processed/*
+data/results/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/results/.gitkeep
 
 # OS / editor
 .DS_Store
