@@ -14,7 +14,7 @@ from lib.models.realized_vol import (
     fill_daily_bipower_variation,
     fill_daily_jump,
     fill_horizon_CSP,
-    fill_horizon_Jump,
+    fill_horizon_jump,
 )
 from lib.utils.data_utils import get_bars
 
@@ -36,14 +36,8 @@ def compute_har_rv_coefficients(rvFrame: pd.DataFrame, isBV: bool) -> dict:
         'month_rv': model.params[month],
     }
 
-def compute_har_rv_cj_coefficients(CSP_Frame: pd.DataFrame, jump_Frame: pd.DataFrame, rv_Frame: pd.DataFrame) -> dict:
-    fullFrame = CSP_Frame[['timestamp', 'day_CSP', 'week_CSP', 'month_CSP']].merge(
-        jump_Frame[['timestamp', 'day_Jump', 'week_Jump', 'month_Jump']], on='timestamp', how='inner'
-    ).merge(
-        rv_Frame[['timestamp', 'target']], on='timestamp', how='inner'
-    )
-
-    model = sm.OLS(fullFrame['target'], sm.add_constant(fullFrame[['day_CSP', 'week_CSP', 'month_CSP', 'day_Jump', 'week_Jump', 'month_Jump']])).fit()
+def compute_har_rv_cj_coefficients(full_Frame: pd.DataFrame) -> dict:
+    model = sm.OLS(full_Frame['target'], sm.add_constant(full_Frame[['day_CSP', 'week_CSP', 'month_CSP', 'day_Jump', 'week_Jump', 'month_Jump']])).fit()
     return {
         'const': model.params['const'],
         'day_CSP': model.params['day_CSP'],
@@ -68,7 +62,7 @@ if __name__ == "__main__":
     dailyJumpFrame = fill_daily_jump(dailyRvFrame, dailyBvFrame)
 
     cspFrame = fill_horizon_CSP(dailyRvFrame, dailyJumpFrame)
-    jumpFrame = fill_horizon_Jump(dailyRvFrame, dailyBvFrame)
+    jumpFrame = fill_horizon_jump(dailyRvFrame, dailyBvFrame)
     rawRvFrame = fill_horizon_rv_metrics('rv', barFrame)
 
     cjCoefficients = compute_har_rv_cj_coefficients(cspFrame, jumpFrame, rawRvFrame)

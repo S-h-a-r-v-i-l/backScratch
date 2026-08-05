@@ -114,7 +114,7 @@ def fill_horizon_CSP(daily_rv: pd.DataFrame, daily_jump: pd.DataFrame) -> pd.Dat
         df.loc[len(df)] = [dailyFrame.iloc[i]['timestamp'], day_CSP, week_CSP, month_CSP, dailyFrame.iloc[i]['CSP']]
     return df
 
-def fill_horizon_Jump(daily_rv: pd.DataFrame, daily_bv: pd.DataFrame) -> pd.DataFrame:
+def fill_horizon_jump(daily_rv: pd.DataFrame, daily_bv: pd.DataFrame) -> pd.DataFrame:
     dailyFrame = fill_daily_jump(daily_rv, daily_bv)
     df = pd.DataFrame(columns=['timestamp', 'day_Jump', 'week_Jump', 'month_Jump', 'target'])
 
