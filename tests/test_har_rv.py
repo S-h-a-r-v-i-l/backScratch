@@ -34,10 +34,8 @@ def test_har_rv_coefficients(test_data: pd.DataFrame, start_offset: int, window_
         columns.append('QLIKE')
     results_df = pd.DataFrame(columns=columns)
 
-    j = start_offset - window_size;
-    if(j < 0):
-        j = 0
     for i in range(start_offset, len(metricDf)):
+        j = max(0, i - window_size)
         # metricDf skips the first 22 days of dailyFrame (see fill_horizon_rv_metrics), so translate the index
         d = i + 22
         day = dailyFrame.iloc[d-1][rvMetric]
@@ -54,12 +52,12 @@ def test_har_rv_coefficients(test_data: pd.DataFrame, start_offset: int, window_
             predicted = max(predicted, 1e-8)
         row = [dailyFrame.iloc[d]['timestamp'], predicted, actual, (predicted - actual) ** 2]
         if rvMetric == 'rv' or rvMetric == 'bv':
-            row.append(actual * (predicted / actual) - np.log(predicted / actual) - 1)
+            ratio = actual / predicted
+            row.append(ratio - np.log(ratio) - 1)
         results_df.loc[len(results_df)] = row
 
         # compute new coeeficients
         coefficients = compute_har_rv_coefficients(metricDf.iloc[j:i], isBV=toggleBV)
-        j = j + 1
 
     save_as_parquet(results_df, f"data/results/test_har_{rvMetric}.parquet")
     return results_df
@@ -83,11 +81,9 @@ def test_har_rv_cj_coefficients(test_data: pd.DataFrame, start_offset: int, wind
     coefficients = compute_har_rv_cj_coefficients(full_Frame.head(start_offset))
 
     results_df = pd.DataFrame(columns=[ 'timestamp', 'predicted_rv', 'actual_rv', 'MSE', 'QLIKE'])
-    
-    j = start_offset - window_size;
-    if(j < 0):
-        j = 0
+
     for i in range(start_offset, len(full_Frame)):
+        j = max(0, i - window_size)
         day_CSP = full_Frame.iloc[i]["day_CSP"]
         week_CSP = full_Frame.iloc[i]["week_CSP"]
         month_CSP = full_Frame.iloc[i]["month_CSP"]
@@ -107,13 +103,13 @@ def test_har_rv_cj_coefficients(test_data: pd.DataFrame, start_offset: int, wind
 
         actual = full_Frame.iloc[i]["target"]
         row = [full_Frame.iloc[i]['timestamp'], predicted, actual, (predicted - actual) ** 2]
-        row.append(actual * (predicted / actual) - np.log(predicted / actual) - 1)
+        ratio = actual / predicted
+        row.append(ratio - np.log(ratio) - 1)
         results_df.loc[len(results_df)] = row
 
         # compute new coeeficients
         coefficients = compute_har_rv_cj_coefficients(full_Frame.iloc[j:i])
-        j = j + 1
-    
+
     save_as_parquet(results_df, f"data/results/test_har_cj.parquet")
     return results_df
 
@@ -125,7 +121,11 @@ if __name__ == "__main__":
     results = test_har_rv_coefficients(test, start_offset=100, window_size=100, rvMetric='log_bv', toggleBV=True)
     print(results.head())
 
-    cj_results = test_har_rv_cj_coefficients(test, start_offset=100, window_size=100)
+    # Jump/CSP coefficients need a wider window than the plain RV/BV fit: the jump
+    # regressor is sparse (~20% of days are ~zero), so a 100-day window only has a
+    # handful of informative jump observations and the OLS fit on week_Jump/month_Jump
+    # becomes unstable (e.g. coefficients of +25 / -5 seen around the Feb 2018 vol spike).
+    cj_results = test_har_rv_cj_coefficients(test, start_offset=100, window_size=500)
     print(cj_results.head())
 
 
