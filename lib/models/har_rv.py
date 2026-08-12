@@ -36,6 +36,40 @@ def compute_har_rv_coefficients(rvFrame: pd.DataFrame, isBV: bool) -> dict:
         'month_rv': model.params[month],
     }
 
+def retrain_model(metricDf: pd.DataFrame, current_day, train_years: int, isBV: bool = False) -> dict:
+    if isinstance(current_day, pd.Timestamp):
+        current_day = current_day.date()
+
+    window_start = (pd.Timestamp(current_day) - pd.DateOffset(years=train_years)).date()
+    if metricDf['timestamp'].min() > window_start:
+        raise ValueError(
+            f"retrain_model: not enough history before {current_day} for train_years={train_years} "
+            f"(earliest available data is {metricDf['timestamp'].min()})"
+        )
+    window = metricDf.loc[(metricDf['timestamp'] > window_start) & (metricDf['timestamp'] <= current_day)]
+    return compute_har_rv_coefficients(window, isBV)
+
+def predict_rv(metricDf: pd.DataFrame, current_day, coefficients: dict, isBV: bool = False) -> float:
+    if isinstance(current_day, pd.Timestamp):
+        current_day = current_day.date()
+
+    if(isBV):
+        day = 'day_bv'
+        week = 'week_bv'
+        month = 'month_bv'
+    else:
+        day = 'day_rv'
+        week = 'week_rv'
+        month = 'month_rv'
+
+    row = metricDf.loc[metricDf['timestamp'] == current_day].iloc[0]
+    return (
+        coefficients['const']
+        + coefficients['day_rv'] * row[day]
+        + coefficients['week_rv'] * row[week]
+        + coefficients['month_rv'] * row[month]
+    )
+
 def compute_har_rv_cj_coefficients(full_Frame: pd.DataFrame) -> dict:
     model = sm.OLS(full_Frame['target'], sm.add_constant(full_Frame[['day_CSP', 'week_CSP', 'month_CSP', 'day_Jump', 'week_Jump', 'month_Jump']])).fit()
     return {
