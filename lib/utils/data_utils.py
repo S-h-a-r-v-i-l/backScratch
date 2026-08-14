@@ -96,7 +96,7 @@ def get_rate_and_close(symbol: str, start: str, end: str) -> pd.DataFrame:
     """
     Load daily close prices and daily cash/borrow rates from FRED (DGS3MO +/- 1.5%
     spread). Returns a DataFrame with columns:
-    ['timestamp', 'close', 'cash_rate', 'borrow_rate'].
+    ['timestamp', 'close', 'cash_rate', 'borrow_rate', 'risk_free_rate'].
     """
     close_df = get_daily_close(symbol, start, end)
     rate_df = get_fred_data(series_id="DGS3MO", start=start, end=end)
@@ -108,8 +108,9 @@ def get_rate_and_close(symbol: str, start: str, end: str) -> pd.DataFrame:
 
     df['cash_rate'] = (1 + (df['rate'] - 1.5) / 100) ** (1/252) - 1
     df['borrow_rate'] = (1 + (df['rate'] + 1.5) / 100) ** (1/252) - 1
+    df['risk_free_rate'] = (1 + df['rate'] / 100) ** (1/252) - 1
 
-    return df[['timestamp', 'close', 'cash_rate', 'borrow_rate']]
+    return df[['timestamp', 'close', 'cash_rate', 'borrow_rate', 'risk_free_rate']]
 
 if __name__ == "__main__":
     df = get_fred_data(series_id="DGS3MO", start="2024-01-01", end="2025-01-01")

@@ -8,14 +8,13 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-from lib.backtester import portfolio
 from lib.backtester.signals import calc_weights
 from lib.models.har_rv import predict_rv, retrain_model
 from lib.models.realized_vol import fill_horizon_rv_metrics
-from lib.utils.data_utils import get_bars, get_rate_and_close
+from lib.utils.data_utils import get_bars, get_rate_and_close, save_as_parquet
 
 
-def run_backtest(portfolio, train_years, start, end, transaction_cost_rate=0.000945):
+def run_backtest(portfolio, train_years, start, end, transaction_cost_rate=0.000945, results_path=None):
 
    
     train_start = (datetime.strptime(start, "%Y-%m-%d") - pd.DateOffset(years=train_years) - timedelta(days=45)).strftime("%Y-%m-%d")
@@ -28,12 +27,19 @@ def run_backtest(portfolio, train_years, start, end, transaction_cost_rate=0.000
 
     dates_rates_and_close = get_rate_and_close('SPY', start, end)
 
+    valid_dates = set(metricDf['timestamp'])
+    dates_rates_and_close = dates_rates_and_close[dates_rates_and_close['timestamp'].dt.date.isin(valid_dates)]
+
     prev_weight = 0.0
+    risk_free_equity = portfolio.equity
     history = []
 
     for index, row in dates_rates_and_close.iterrows():
 
-        forecast = predict_rv(metricDf, row['timestamp'], coefficients, isBV=False);
+        current_day = row['timestamp'].date()
+        visible_metrics = metricDf.loc[metricDf['timestamp'] <= current_day]
+
+        forecast = predict_rv(visible_metrics, row['timestamp'], coefficients, isBV=False);
         new_weight = calc_weights(forecast);
 
 
@@ -42,8 +48,22 @@ def run_backtest(portfolio, train_years, start, end, transaction_cost_rate=0.000
         portfolio.update(row['close'], row['borrow_rate'], row['cash_rate'])
 
         prev_weight = new_weight
-        coefficients = retrain_model(metricDf, row['timestamp'], train_years, isBV=False)
+        coefficients = retrain_model(visible_metrics, current_day, train_years, isBV=False)
 
-        history.append({'timestamp': row['timestamp'], 'weight': new_weight, 'forecast': forecast, **portfolio.get_state()})
+        risk_free_equity *= (1 + row['risk_free_rate'])
 
-    return pd.DataFrame(history)
+        history.append({
+            'timestamp': row['timestamp'],
+            'weight': new_weight,
+            'forecast': forecast,
+            **portfolio.get_state(),
+            'risk_free_rate': row['risk_free_rate'],
+            'risk_free_equity': risk_free_equity,
+        })
+
+    history_df = pd.DataFrame(history)
+
+    if results_path is not None:
+        save_as_parquet(history_df, results_path)
+
+    return history_df
