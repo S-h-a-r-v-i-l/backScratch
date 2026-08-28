@@ -13,17 +13,53 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 from alpaca.data.timeframe import TimeFrameUnit
 
-def get_fred_data(series_id: str, start: str, end: str) -> pd.DataFrame:
+FRED_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations"
+
+
+def get_fred_data(series_id: str, start: str, end: str,
+                  realtime_start: str | None = None,
+                  realtime_end: str | None = None,
+                  vintage_dates: str | None = None) -> pd.DataFrame:
+    """
+    Fetch a St. Louis Fed series' observations.
+
+    Default (no realtime_*/vintage_dates): plain FRED behaviour — the latest
+    revision of each observation as of today.
+
+    Pass realtime_start/realtime_end or vintage_dates to hit ALFRED (same
+    endpoint, real-time parameters flip it into archival mode) and get each value
+    as it was actually known on that past date — point-in-time, no look-ahead.
+    Setting realtime_start == realtime_end == D returns the vintage as of D.
+
+    When a vintage query returns more than one real-time row per date, the last
+    (most recently revised within the requested window) is kept, so the result is
+    always one 'rate' per 'timestamp'.
+    """
     load_dotenv()
     api_key = os.getenv("FRED_API_KEY")
-    url = f"https://api.stlouisfed.org/fred/series/observations?series_id={series_id}&api_key={api_key}&file_type=json&observation_start={start}&observation_end={end}"
-    response = requests.get(url)
+    params = {
+        "series_id": series_id,
+        "api_key": api_key,
+        "file_type": "json",
+        "observation_start": start,
+        "observation_end": end,
+    }
+    if realtime_start is not None:
+        params["realtime_start"] = realtime_start
+    if realtime_end is not None:
+        params["realtime_end"] = realtime_end
+    if vintage_dates is not None:
+        params["vintage_dates"] = vintage_dates
+
+    response = requests.get(FRED_OBSERVATIONS_URL, params=params)
+    response.raise_for_status()
     data = response.json()
     observations = data['observations']
     df = pd.DataFrame(observations)
     df['date'] = pd.to_datetime(df['date'])
     df['rate'] = pd.to_numeric(df['value'], errors='coerce')
     df = df[['date', 'rate']].rename(columns={'date': 'timestamp'})
+    df = df.drop_duplicates(subset='timestamp', keep='last').reset_index(drop=True)
     return df
 
 
@@ -92,14 +128,27 @@ def get_daily_close(symbol: str, start: str, end: str) -> pd.DataFrame:
     save_as_parquet(df, parquet_path)
     return df
 
-def get_rate_and_close(symbol: str, start: str, end: str) -> pd.DataFrame:
+def get_rate_and_close(symbol: str, start: str, end: str,
+                       rate_vintage_date: str | None = None) -> pd.DataFrame:
     """
-    Load daily close prices and daily cash/borrow rates from FRED (DGS3MO +/- 1.5%
-    spread). Returns a DataFrame with columns:
-    ['timestamp', 'close', 'cash_rate', 'borrow_rate', 'risk_free_rate'].
+    Load daily close prices and daily cash/borrow rates from DGS3MO (3-month
+    T-bill constant-maturity yield) +/- 1.5% spread. Returns a DataFrame with
+    columns: ['timestamp', 'close', 'cash_rate', 'borrow_rate', 'risk_free_rate'].
+
+    rate_vintage_date=None (default): plain FRED — latest revision of DGS3MO.
+    rate_vintage_date="YYYY-MM-DD": ALFRED — DGS3MO as it was known on that date,
+    i.e. point-in-time with no look-ahead. DGS3MO is a daily market yield that is
+    effectively never revised, so in practice the two agree; the vintage arg just
+    makes the no-look-ahead intent explicit. Pick a vintage at or just after the
+    backtest's `end` to capture every observation without pulling later revisions.
     """
     close_df = get_daily_close(symbol, start, end)
-    rate_df = get_fred_data(series_id="DGS3MO", start=start, end=end)
+    if rate_vintage_date is None:
+        rate_df = get_fred_data(series_id="DGS3MO", start=start, end=end)
+    else:
+        rate_df = get_fred_data(series_id="DGS3MO", start=start, end=end,
+                                realtime_start=rate_vintage_date,
+                                realtime_end=rate_vintage_date)
 
     close_df['timestamp'] = close_df['timestamp'].dt.tz_convert(None).dt.normalize()
 
@@ -113,5 +162,13 @@ def get_rate_and_close(symbol: str, start: str, end: str) -> pd.DataFrame:
     return df[['timestamp', 'close', 'cash_rate', 'borrow_rate', 'risk_free_rate']]
 
 if __name__ == "__main__":
-    df = get_fred_data(series_id="DGS3MO", start="2024-01-01", end="2025-01-01")
-    print(df)
+    # FRED: latest revision of DGS3MO
+    fred_df = get_fred_data(series_id="DGS3MO", start="2024-01-01", end="2025-01-01")
+    print("FRED (latest):")
+    print(fred_df)
+
+    # ALFRED: DGS3MO as it was known on 2024-07-01
+    alfred_df = get_fred_data(series_id="DGS3MO", start="2024-01-01", end="2025-01-01",
+                              realtime_start="2024-07-01", realtime_end="2024-07-01")
+    print("\nALFRED (vintage 2024-07-01):")
+    print(alfred_df)

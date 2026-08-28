@@ -68,12 +68,17 @@ def make_fake_bars(symbol: str, start: str, end: str, timeframe_minutes: int = 5
     return pd.DataFrame(rows)
 
 
-def make_fake_rates(symbol: str, start: str, end: str, base_rate: float = 1.5) -> pd.DataFrame:
+def make_fake_rates(symbol: str, start: str, end: str, base_rate: float = 1.5,
+                    rate_vintage_date: str | None = None) -> pd.DataFrame:
     """
     Drop-in replacement for data_utils.get_rate_and_close. Same price path as
     make_fake_bars, plus constant cash/borrow/risk-free rates computed with the
     real formula (base_rate +/- 1.5% spread) so downstream rate math is exercised
     the same way it would be against real FRED data.
+
+    `rate_vintage_date` is accepted (and ignored) so the fixture matches the real
+    get_rate_and_close signature — the fake rates are constant, so there is no
+    vintage-vs-latest distinction to model.
     """
     dates = pd.bdate_range(start, end)
     df = pd.DataFrame({
@@ -201,7 +206,7 @@ def test_transaction_costs(monkeypatch):
     from lib.backtester.portfolio import Portfolio
 
     weights = [0.4, 0.4, -0.3, 0.5]
-    cost_rate = 0.000945  # engine.run_backtest's own default
+    cost_rate = 0.0000945  # engine.run_backtest's own default
 
     weight_iter = iter(weights)
     monkeypatch.setattr(engine, "predict_rv", lambda *args, **kwargs: next(weight_iter))
@@ -233,7 +238,7 @@ def test_transaction_costs(monkeypatch):
 def make_gapped_rates(dropped_date):
     """Returns a get_rate_and_close replacement with one date removed, simulating
     a data-vendor gap on that day."""
-    def _make(symbol: str, start: str, end: str) -> pd.DataFrame:
+    def _make(symbol: str, start: str, end: str, rate_vintage_date: str | None = None) -> pd.DataFrame:
         df = make_fake_rates(symbol, start, end)
         return df[df['timestamp'].dt.date != dropped_date].reset_index(drop=True)
     return _make

@@ -99,7 +99,11 @@ if __name__ == "__main__":
     jumpFrame = fill_horizon_jump(dailyRvFrame, dailyBvFrame)
     rawRvFrame = fill_horizon_rv_metrics('rv', barFrame)
 
-    cjCoefficients = compute_har_rv_cj_coefficients(cspFrame, jumpFrame, rawRvFrame)
+    cjFrame = cspFrame[['timestamp', 'day_CSP', 'week_CSP', 'month_CSP']].merge(
+        jumpFrame[['timestamp', 'day_Jump', 'week_Jump', 'month_Jump']], on='timestamp'
+    ).merge(rawRvFrame[['timestamp', 'target']], on='timestamp')
+
+    cjCoefficients = compute_har_rv_cj_coefficients(cjFrame)
     print(cjCoefficients)
 
     
